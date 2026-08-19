@@ -712,7 +712,7 @@ public class LatinIME extends InputMethodService implements
      * Modern Android draws the IME window behind the navigation bar, whose hide-keyboard
      * and input-method-switcher controls can otherwise overlap the bottom-row keys.
      */
-    private View createKeyboardInputView() {
+    View createKeyboardInputView() {
         final LatinKeyboardView keyboardView = mKeyboardSwitcher.getInputView();
         if (keyboardView == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) {
             return keyboardView;
