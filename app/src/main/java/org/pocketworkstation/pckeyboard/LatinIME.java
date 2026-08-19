@@ -16,6 +16,7 @@
 
 package org.pocketworkstation.pckeyboard;
 
+import android.annotation.SuppressLint;
 import org.pocketworkstation.pckeyboard.LatinIMEUtil.RingCharBuffer;
 
 import com.google.android.voiceime.VoiceRecognitionTrigger;
@@ -23,6 +24,7 @@ import com.google.android.voiceime.VoiceRecognitionTrigger;
 import org.xmlpull.v1.XmlPullParserException;
 
 import android.app.AlertDialog;
+import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -45,8 +47,6 @@ import android.os.SystemClock;
 import android.os.Vibrator;
 import android.preference.PreferenceActivity;
 import android.preference.PreferenceManager;
-import android.support.v4.app.NotificationCompat;
-import android.support.v4.app.NotificationManagerCompat;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -412,7 +412,7 @@ public class LatinIME extends InputMethodService implements
         pFilter.addAction("android.intent.action.PACKAGE_ADDED");
         pFilter.addAction("android.intent.action.PACKAGE_REPLACED");
         pFilter.addAction("android.intent.action.PACKAGE_REMOVED");
-        registerReceiver(mPluginManager, pFilter);
+        registerReceiverCompat(mPluginManager, pFilter);
 
         LatinIMEUtil.GCUtils.getInstance().reset();
         boolean tryGC = true;
@@ -431,7 +431,7 @@ public class LatinIME extends InputMethodService implements
         // register to receive ringer mode changes for silent mode
         IntentFilter filter = new IntentFilter(
                 AudioManager.RINGER_MODE_CHANGED_ACTION);
-        registerReceiver(mReceiver, filter);
+        registerReceiverCompat(mReceiver, filter);
         prefs.registerOnSharedPreferenceChangeListener(this);
         setNotification(mKeyboardNotification);
     }
@@ -457,6 +457,15 @@ public class LatinIME extends InputMethodService implements
         int screenHeightPercent = isPortrait ? mHeightPortrait : mHeightLandscape;
         LatinIME.sKeyboardSettings.keyboardMode = kbMode;
         LatinIME.sKeyboardSettings.keyboardHeightPercent = (float) screenHeightPercent;
+    }
+
+
+    @SuppressLint("UnspecifiedRegisterReceiverFlag") // Pre-33 overload is guarded by SDK check.
+    private Intent registerReceiverCompat(BroadcastReceiver receiver, IntentFilter filter) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        }
+        return registerReceiver(receiver, filter);
     }
 
     private void createNotificationChannel() {
@@ -489,50 +498,53 @@ public class LatinIME extends InputMethodService implements
             mNotificationReceiver = new NotificationReceiver(this);
             final IntentFilter pFilter = new IntentFilter(NotificationReceiver.ACTION_SHOW);
             pFilter.addAction(NotificationReceiver.ACTION_SETTINGS);
-            registerReceiver(mNotificationReceiver, pFilter);
+            registerReceiverCompat(mNotificationReceiver, pFilter);
             
-            Intent notificationIntent = new Intent(NotificationReceiver.ACTION_SHOW);
-            PendingIntent contentIntent = PendingIntent.getBroadcast(getApplicationContext(), 1, notificationIntent, 0);
-            //PendingIntent contentIntent = PendingIntent.getActivity(this, 0, notificationIntent, 0);
+            int pendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                pendingIntentFlags |= PendingIntent.FLAG_IMMUTABLE;
+            }
 
-            Intent configIntent = new Intent(NotificationReceiver.ACTION_SETTINGS);
-            PendingIntent configPendingIntent =
-                    PendingIntent.getBroadcast(getApplicationContext(), 2, configIntent, 0);
+            Intent notificationIntent = new Intent(NotificationReceiver.ACTION_SHOW)
+                    .setPackage(getPackageName());
+            PendingIntent contentIntent = PendingIntent.getBroadcast(
+                    getApplicationContext(), 1, notificationIntent, pendingIntentFlags);
+
+            Intent configIntent = new Intent(NotificationReceiver.ACTION_SETTINGS)
+                    .setPackage(getPackageName());
+            PendingIntent configPendingIntent = PendingIntent.getBroadcast(
+                    getApplicationContext(), 2, configIntent, pendingIntentFlags);
 
             String title = "Show Hacker's Keyboard";
             String body = "Select this to open the keyboard. Disable in settings.";
 
-            NotificationCompat.Builder mBuilder = new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-                    .setSmallIcon(R.drawable.icon_hk_notification)
-                    .setColor(0xff220044)
-                    .setAutoCancel(false) //Make this notification automatically dismissed when the user touches it -> false.
-                    .setTicker(text)
-                    .setContentTitle(title)
-                    .setContentText(body)
-                    .setContentIntent(contentIntent)
-                    .setOngoing(true)
-                    .addAction(R.drawable.icon_hk_notification, getString(R.string.notification_action_settings),
-                            configPendingIntent)
-                    .setPriority(NotificationCompat.PRIORITY_DEFAULT);
-
-            /*
-            Notification notification = new Notification.Builder(getApplicationContext())
-                    .setAutoCancel(false) //Make this notification automatically dismissed when the user touches it -> false.
+            Notification.Builder builder;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                builder = new Notification.Builder(this, NOTIFICATION_CHANNEL_ID);
+            } else {
+                builder = new Notification.Builder(this);
+            }
+            builder.setSmallIcon(R.drawable.icon_hk_notification)
+                    .setAutoCancel(false)
                     .setTicker(text)
                     .setContentTitle(title)
                     .setContentText(body)
                     .setWhen(when)
-                    .setSmallIcon(icon)
                     .setContentIntent(contentIntent)
-                    .getNotification();
+                    .setOngoing(true);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                builder.setColor(0xff220044);
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+                builder.addAction(R.drawable.icon_hk_notification,
+                        getString(R.string.notification_action_settings), configPendingIntent);
+                builder.setPriority(Notification.PRIORITY_DEFAULT);
+            }
+
+            Notification notification = Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN
+                    ? builder.build() : builder.getNotification();
             notification.flags |= Notification.FLAG_ONGOING_EVENT | Notification.FLAG_NO_CLEAR;
-            mNotificationManager.notify(ID, notification);
-            */
-
-            NotificationManagerCompat notificationManager = NotificationManagerCompat.from(this);
-
-            // notificationId is a unique int for each notification that you must define
-            notificationManager.notify(NOTIFICATION_ONGOING_ID, mBuilder.build());
+            mNotificationManager.notify(NOTIFICATION_ONGOING_ID, notification);
 
         } else if (mNotificationReceiver != null) {
             mNotificationManager.cancel(NOTIFICATION_ONGOING_ID);

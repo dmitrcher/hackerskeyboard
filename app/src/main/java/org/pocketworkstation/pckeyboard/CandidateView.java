@@ -16,6 +16,7 @@
 
 package org.pocketworkstation.pckeyboard;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Canvas;
@@ -318,6 +319,7 @@ public class CandidateView extends View {
         invalidate();
     }
     
+    @SuppressLint("WrongCall") // Intentional: onDraw(null) recomputes suggestion widths without painting.
     public void setSuggestions(List<CharSequence> suggestions, boolean completions,
             boolean typedWordValid, boolean haveMinimalSuggestion) {
         clear();
