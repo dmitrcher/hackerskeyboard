@@ -58,6 +58,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.Window;
+import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.view.inputmethod.CompletionInfo;
 import android.view.inputmethod.EditorInfo;
@@ -706,6 +707,62 @@ public class LatinIME extends InputMethodService implements
         mConfigurationChanging = false;
     }
 
+    /**
+     * Wraps the keyboard in a small edge-to-edge compatibility container on Android 15+.
+     * Modern Android draws the IME window behind the navigation bar, whose hide-keyboard
+     * and input-method-switcher controls can otherwise overlap the bottom-row keys.
+     */
+    private View createKeyboardInputView() {
+        final LatinKeyboardView keyboardView = mKeyboardSwitcher.getInputView();
+        if (keyboardView == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            return keyboardView;
+        }
+
+        // setInputView() can be called again when returning from the voice input view.
+        // Detach the reusable LatinKeyboardView before placing it in a fresh container.
+        final ViewParent parent = keyboardView.getParent();
+        if (parent instanceof ViewGroup) {
+            ((ViewGroup) parent).removeView(keyboardView);
+        }
+
+        final LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setClipToPadding(false);
+        container.addView(keyboardView, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        final View navigationBarSpacer = new View(this);
+        container.addView(navigationBarSpacer, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0));
+
+        container.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+            @Override
+            public WindowInsets onApplyWindowInsets(View v, WindowInsets insets) {
+                final android.graphics.Insets navigationInsets =
+                        insets.getInsets(WindowInsets.Type.navigationBars());
+
+                // If the navigation bar is on a side (common in landscape), keep the
+                // corresponding edge keys out from under it as well.
+                if (container.getPaddingLeft() != navigationInsets.left
+                        || container.getPaddingRight() != navigationInsets.right) {
+                    container.setPadding(navigationInsets.left, 0, navigationInsets.right, 0);
+                }
+
+                final ViewGroup.LayoutParams spacerParams = navigationBarSpacer.getLayoutParams();
+                if (spacerParams.height != navigationInsets.bottom) {
+                    spacerParams.height = navigationInsets.bottom;
+                    navigationBarSpacer.setLayoutParams(spacerParams);
+                    Log.i(TAG, "Applied IME navigation insets: left=" + navigationInsets.left
+                            + ", right=" + navigationInsets.right
+                            + ", bottom=" + navigationInsets.bottom);
+                }
+                return insets;
+            }
+        });
+        container.requestApplyInsets();
+        return container;
+    }
+
     @Override
     public View onCreateInputView() {
         setCandidatesViewShown(false);  // Workaround for "already has a parent" when reconfiguring
@@ -713,7 +770,7 @@ public class LatinIME extends InputMethodService implements
         mKeyboardSwitcher.makeKeyboards(true);
         mKeyboardSwitcher.setKeyboardMode(KeyboardSwitcher.MODE_TEXT, 0,
                 shouldShowVoiceButton(getCurrentInputEditorInfo()));
-        return mKeyboardSwitcher.getInputView();
+        return createKeyboardInputView();
     }
 
     @Override
@@ -2482,7 +2539,7 @@ public class LatinIME extends InputMethodService implements
                     if (p != null && p instanceof ViewGroup) {
                         ((ViewGroup) p).removeView(view);
                     }
-                    setInputView(mKeyboardSwitcher.getInputView());
+                    setInputView(createKeyboardInputView());
                 }
                 setCandidatesViewShown(true);
                 updateInputViewShown();
