@@ -740,21 +740,34 @@ public class LatinIME extends InputMethodService implements
             public WindowInsets onApplyWindowInsets(View v, WindowInsets insets) {
                 final android.graphics.Insets navigationInsets =
                         insets.getInsets(WindowInsets.Type.navigationBars());
+                final android.graphics.Insets mandatoryGestureInsets =
+                        insets.getInsets(WindowInsets.Type.mandatorySystemGestures());
+                final android.graphics.Insets tappableInsets =
+                        insets.getInsets(WindowInsets.Type.tappableElement());
 
-                // If the navigation bar is on a side (common in landscape), keep the
-                // corresponding edge keys out from under it as well.
+                // Three-button navigation reports a real navigation-bar inset. Gesture
+                // navigation can report navigationBars.bottom == 0 for IME windows while
+                // still reserving a mandatory gesture strip for the hide/switch controls.
+                final int bottomSafeInset = Math.max(navigationInsets.bottom,
+                        Math.max(mandatoryGestureInsets.bottom, tappableInsets.bottom));
+
+                // Only actual navigation-bar side insets should move the edge keys. The
+                // generic system-gesture left/right insets are just back-gesture regions.
                 if (container.getPaddingLeft() != navigationInsets.left
                         || container.getPaddingRight() != navigationInsets.right) {
                     container.setPadding(navigationInsets.left, 0, navigationInsets.right, 0);
                 }
 
                 final ViewGroup.LayoutParams spacerParams = navigationBarSpacer.getLayoutParams();
-                if (spacerParams.height != navigationInsets.bottom) {
-                    spacerParams.height = navigationInsets.bottom;
+                if (spacerParams.height != bottomSafeInset) {
+                    spacerParams.height = bottomSafeInset;
                     navigationBarSpacer.setLayoutParams(spacerParams);
-                    Log.i(TAG, "Applied IME navigation insets: left=" + navigationInsets.left
-                            + ", right=" + navigationInsets.right
-                            + ", bottom=" + navigationInsets.bottom);
+                    Log.i(TAG, "Applied IME safe insets: navBottom=" + navigationInsets.bottom
+                            + ", mandatoryBottom=" + mandatoryGestureInsets.bottom
+                            + ", tappableBottom=" + tappableInsets.bottom
+                            + ", appliedBottom=" + bottomSafeInset
+                            + ", left=" + navigationInsets.left
+                            + ", right=" + navigationInsets.right);
                 }
                 return insets;
             }
