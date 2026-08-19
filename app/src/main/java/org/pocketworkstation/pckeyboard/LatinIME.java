@@ -732,6 +732,21 @@ public class LatinIME extends InputMethodService implements
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         final View navigationBarSpacer = new View(this);
+
+        // Continue the selected keyboard theme through the system gesture area.
+        // Clone only the keyboard background (not the whole container) so translucent
+        // themes keep their original alpha instead of becoming darker from double
+        // compositing underneath the keyboard itself.
+        final android.graphics.drawable.Drawable keyboardBackground = keyboardView.getBackground();
+        if (keyboardBackground != null && keyboardBackground.getConstantState() != null) {
+            final android.graphics.drawable.Drawable spacerBackground = keyboardBackground
+                    .getConstantState().newDrawable(getResources()).mutate();
+            spacerBackground.setState(keyboardBackground.getState());
+            spacerBackground.setLevel(keyboardBackground.getLevel());
+            navigationBarSpacer.setBackground(spacerBackground);
+            navigationBarSpacer.setAlpha(keyboardView.getAlpha());
+        }
+
         container.addView(navigationBarSpacer, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0));
 

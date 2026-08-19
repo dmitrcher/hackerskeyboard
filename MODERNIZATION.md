@@ -23,6 +23,7 @@ This fork preserves Hacker's Keyboard's legacy behavior while updating the Andro
 - Added explicit component export state for Android 12+.
 - Added package visibility queries for external dictionary plugins.
 - Added Android 15+ navigation-bar inset handling around the IME so system hide/switch controls do not overlap bottom-row keys; side navigation insets are also respected in landscape.
+- The gesture-area spacer clones the active keyboard background drawable, preserving theme colors and alpha (including translucent themes) without double-compositing the keyboard itself.
 - Routed KeyboardSwitcher input-view refreshes through the same inset-aware container to avoid re-parenting crashes when Android rebinds the IME.
 - On gesture-navigation devices, the IME safe bottom area now uses the maximum of navigation-bar, mandatory-system-gesture, and tappable-element insets; some Android 16 IME windows report navigationBars.bottom as zero even while reserving the system hide/switch strip.
 - Physical Android 16 verification on Xiaomi 21121210G measured navBottom=0, mandatoryBottom=119, tappableBottom=119, so the IME applies a 119 px bottom safe spacer.
