@@ -43,4 +43,4 @@ Verified during the modernization:
 - native library builds for arm64-v8a, armeabi-v7a, x86, and x86_64
 - debug APK passes 16 KiB ZIP alignment verification
 
-A physical-device smoke test was not run at the time of this commit because no Android device was connected over ADB.
+Physical-device verification now includes a Xiaomi 21121210G (`ingres`) running Android 16 / API 36 over wireless ADB. The IME service starts and loads its arm64 native library successfully. The settings regression test covers Theme and font, Input languages, and Key feedback; these internal screens use explicit component intents so they remain reachable while their activities stay non-exported.
