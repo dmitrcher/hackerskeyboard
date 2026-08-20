@@ -272,6 +272,7 @@ public class LatinIME extends InputMethodService implements
     /* package */String mWordSeparators;
     private String mSentenceSeparators;
     private boolean mConfigurationChanging;
+    private int mLastImeSafeBottomInset;
 
     // Keeps track of most recently inserted text (multi-character key) for
     // reverting
@@ -712,11 +713,81 @@ public class LatinIME extends InputMethodService implements
      * Modern Android draws the IME window behind the navigation bar, whose hide-keyboard
      * and input-method-switcher controls can otherwise overlap the bottom-row keys.
      */
+    private void configureImeNavigationBar() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            return;
+        }
+        final android.app.Dialog imeDialog = getWindow();
+        if (imeDialog == null) {
+            return;
+        }
+        final Window window = imeDialog.getWindow();
+        if (window == null) {
+            return;
+        }
+
+        // The keyboard itself paints the gesture area. Keep Android from adding a
+        // contrasting navigation-bar layer or a one-pixel divider over that themed area.
+        window.setNavigationBarColor(android.graphics.Color.TRANSPARENT);
+        window.setNavigationBarDividerColor(android.graphics.Color.TRANSPARENT);
+        window.setNavigationBarContrastEnforced(false);
+    }
+
+    @SuppressLint("NewApi")
+    private void applyImeSafeInsets(final LinearLayout container,
+            final View navigationBarSpacer, final WindowInsets insets) {
+        if (insets == null) {
+            return;
+        }
+
+        final android.graphics.Insets navigationInsets =
+                insets.getInsets(WindowInsets.Type.navigationBars());
+        final android.graphics.Insets mandatoryGestureInsets =
+                insets.getInsets(WindowInsets.Type.mandatorySystemGestures());
+        final android.graphics.Insets tappableInsets =
+                insets.getInsets(WindowInsets.Type.tappableElement());
+
+        // Gesture-navigation IME windows can transiently report zero while a new
+        // InputView is being attached. Never throw away a previously measured safe
+        // inset just because an intermediate callback has not received it yet.
+        final int measuredBottomInset = Math.max(navigationInsets.bottom,
+                Math.max(mandatoryGestureInsets.bottom, tappableInsets.bottom));
+        if (measuredBottomInset > 0) {
+            mLastImeSafeBottomInset = measuredBottomInset;
+        }
+        final int bottomSafeInset = measuredBottomInset > 0
+                ? measuredBottomInset : mLastImeSafeBottomInset;
+
+        // Only actual navigation-bar side insets should move the edge keys. The
+        // generic system-gesture left/right insets are just back-gesture regions.
+        if (container.getPaddingLeft() != navigationInsets.left
+                || container.getPaddingRight() != navigationInsets.right) {
+            container.setPadding(navigationInsets.left, 0, navigationInsets.right, 0);
+        }
+
+        final ViewGroup.LayoutParams spacerParams = navigationBarSpacer.getLayoutParams();
+        if (spacerParams.height != bottomSafeInset) {
+            spacerParams.height = bottomSafeInset;
+            navigationBarSpacer.setLayoutParams(spacerParams);
+        }
+        Log.i(TAG, "Applied IME safe insets: navBottom=" + navigationInsets.bottom
+                + ", mandatoryBottom=" + mandatoryGestureInsets.bottom
+                + ", tappableBottom=" + tappableInsets.bottom
+                + ", measuredBottom=" + measuredBottomInset
+                + ", cachedBottom=" + mLastImeSafeBottomInset
+                + ", appliedBottom=" + bottomSafeInset
+                + ", left=" + navigationInsets.left
+                + ", right=" + navigationInsets.right);
+    }
+
+    @SuppressLint("NewApi")
     View createKeyboardInputView() {
         final LatinKeyboardView keyboardView = mKeyboardSwitcher.getInputView();
         if (keyboardView == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) {
             return keyboardView;
         }
+
+        configureImeNavigationBar();
 
         // setInputView() can be called again when returning from the voice input view.
         // Detach the reusable LatinKeyboardView before placing it in a fresh container.
@@ -747,46 +818,47 @@ public class LatinIME extends InputMethodService implements
             navigationBarSpacer.setAlpha(keyboardView.getAlpha());
         }
 
+        // Re-created InputViews start with the last known safe size instead of flashing
+        // or remaining at zero while Android is still dispatching the new window insets.
         container.addView(navigationBarSpacer, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0));
+                ViewGroup.LayoutParams.MATCH_PARENT, mLastImeSafeBottomInset));
 
         container.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
             @Override
             public WindowInsets onApplyWindowInsets(View v, WindowInsets insets) {
-                final android.graphics.Insets navigationInsets =
-                        insets.getInsets(WindowInsets.Type.navigationBars());
-                final android.graphics.Insets mandatoryGestureInsets =
-                        insets.getInsets(WindowInsets.Type.mandatorySystemGestures());
-                final android.graphics.Insets tappableInsets =
-                        insets.getInsets(WindowInsets.Type.tappableElement());
-
-                // Three-button navigation reports a real navigation-bar inset. Gesture
-                // navigation can report navigationBars.bottom == 0 for IME windows while
-                // still reserving a mandatory gesture strip for the hide/switch controls.
-                final int bottomSafeInset = Math.max(navigationInsets.bottom,
-                        Math.max(mandatoryGestureInsets.bottom, tappableInsets.bottom));
-
-                // Only actual navigation-bar side insets should move the edge keys. The
-                // generic system-gesture left/right insets are just back-gesture regions.
-                if (container.getPaddingLeft() != navigationInsets.left
-                        || container.getPaddingRight() != navigationInsets.right) {
-                    container.setPadding(navigationInsets.left, 0, navigationInsets.right, 0);
-                }
-
-                final ViewGroup.LayoutParams spacerParams = navigationBarSpacer.getLayoutParams();
-                if (spacerParams.height != bottomSafeInset) {
-                    spacerParams.height = bottomSafeInset;
-                    navigationBarSpacer.setLayoutParams(spacerParams);
-                    Log.i(TAG, "Applied IME safe insets: navBottom=" + navigationInsets.bottom
-                            + ", mandatoryBottom=" + mandatoryGestureInsets.bottom
-                            + ", tappableBottom=" + tappableInsets.bottom
-                            + ", appliedBottom=" + bottomSafeInset
-                            + ", left=" + navigationInsets.left
-                            + ", right=" + navigationInsets.right);
-                }
+                applyImeSafeInsets(container, navigationBarSpacer, insets);
                 return insets;
             }
         });
+
+        // requestApplyInsets() before attachment is only advisory. Re-read the root
+        // insets after attachment as well, which makes theme changes and IME switching
+        // deterministic even when the first callback was delivered too early.
+        container.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override
+            public void onViewAttachedToWindow(final View v) {
+                v.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        WindowInsets rootInsets = v.getRootWindowInsets();
+                        if (rootInsets == null) {
+                            final android.app.Dialog imeDialog = getWindow();
+                            if (imeDialog != null && imeDialog.getWindow() != null) {
+                                rootInsets = imeDialog.getWindow().getDecorView().getRootWindowInsets();
+                            }
+                        }
+                        applyImeSafeInsets(container, navigationBarSpacer, rootInsets);
+                        v.requestApplyInsets();
+                    }
+                });
+            }
+
+            @Override
+            public void onViewDetachedFromWindow(View v) {
+                // Nothing to release; this listener belongs to this short-lived container.
+            }
+        });
+
         container.requestApplyInsets();
         return container;
     }
