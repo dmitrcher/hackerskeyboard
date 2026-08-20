@@ -224,6 +224,8 @@ public class LatinKeyboardBaseView extends View implements PointerTracker.UIProx
     protected View mMiniKeyboardContainer;
     protected View mMiniKeyboardParent;
     protected boolean mMiniKeyboardVisible;
+    private Drawable mThemeBackgroundForPopups;
+    private float mThemeBackgroundAlpha = 1.0f;
     protected final WeakHashMap<Key, Keyboard> mMiniKeyboardCacheMain = new WeakHashMap<Key, Keyboard>();
     protected final WeakHashMap<Key, Keyboard> mMiniKeyboardCacheShift = new WeakHashMap<Key, Keyboard>();
     protected final WeakHashMap<Key, Keyboard> mMiniKeyboardCacheCaps = new WeakHashMap<Key, Keyboard>();
@@ -1323,11 +1325,76 @@ public class LatinKeyboardBaseView extends View implements PointerTracker.UIProx
         return result;
     }
 
+    /**
+     * Captures a flat fill derived from the active keyboard theme for long-press
+     * popups. Using the whole 9-patch would also copy its edge pixels/border.
+     */
+    void captureThemeForPopups() {
+        mThemeBackgroundForPopups = createThemeFillDrawable();
+        mThemeBackgroundAlpha = getAlpha();
+    }
+
+    /** Returns a borderless fill matching the current keyboard background. */
+    android.graphics.drawable.Drawable createThemeFillDrawable() {
+        return createThemeFillDrawable(getBackground());
+    }
+
+    private android.graphics.drawable.Drawable createThemeFillDrawable(Drawable source) {
+        if (source == null) {
+            return null;
+        }
+        if (source instanceof android.graphics.drawable.ColorDrawable) {
+            return new android.graphics.drawable.ColorDrawable(
+                    ((android.graphics.drawable.ColorDrawable) source).getColor());
+        }
+        if (source.getConstantState() == null) {
+            return null;
+        }
+
+        // Render an independent copy at a modest natural size and sample its center,
+        // which is inside the stretch/content area rather than a 9-patch edge.
+        final int width = Math.max(16, Math.min(128, source.getIntrinsicWidth() > 0
+                ? source.getIntrinsicWidth() : 64));
+        final int height = Math.max(16, Math.min(128, source.getIntrinsicHeight() > 0
+                ? source.getIntrinsicHeight() : 64));
+        final Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        final Canvas canvas = new Canvas(bitmap);
+        final Drawable sample = source.getConstantState().newDrawable(getResources()).mutate();
+        sample.setState(source.getState());
+        sample.setLevel(source.getLevel());
+        sample.setBounds(0, 0, width, height);
+        sample.draw(canvas);
+        final int color = bitmap.getPixel(width / 2, height / 2);
+        bitmap.recycle();
+        return new android.graphics.drawable.ColorDrawable(color);
+    }
+
+    private void applyActiveThemeToMiniKeyboardContainer(View container) {
+        Drawable themeBackground = mThemeBackgroundForPopups == null ? null
+                : createThemeFillDrawable(mThemeBackgroundForPopups);
+        if (themeBackground == null) {
+            themeBackground = createThemeFillDrawable();
+        }
+        if (themeBackground == null) {
+            return;
+        }
+
+        // Replacing the legacy popup panel must not change its explicit padding.
+        final int paddingLeft = container.getPaddingLeft();
+        final int paddingTop = container.getPaddingTop();
+        final int paddingRight = container.getPaddingRight();
+        final int paddingBottom = container.getPaddingBottom();
+        container.setBackground(themeBackground);
+        container.setAlpha(mThemeBackgroundAlpha);
+        container.setPadding(paddingLeft, paddingTop, paddingRight, paddingBottom);
+    }
+
     private void inflateMiniKeyboardContainer() {
         //Log.i(TAG, "inflateMiniKeyboardContainer(), mPopupLayout=" + mPopupLayout + " from " + this);
         LayoutInflater inflater = (LayoutInflater)getContext().getSystemService(
                 Context.LAYOUT_INFLATER_SERVICE);
         View container = inflater.inflate(mPopupLayout, null);
+        applyActiveThemeToMiniKeyboardContainer(container);
 
         mMiniKeyboard =
                 (LatinKeyboardBaseView)container.findViewById(R.id.LatinKeyboardBaseView);

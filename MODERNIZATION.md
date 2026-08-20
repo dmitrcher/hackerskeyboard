@@ -23,12 +23,14 @@ This fork preserves Hacker's Keyboard's legacy behavior while updating the Andro
 - Added explicit component export state for Android 12+.
 - Added package visibility queries for external dictionary plugins.
 - Added Android 15+ navigation-bar inset handling around the IME so system hide/switch controls do not overlap bottom-row keys; side navigation insets are also respected in landscape.
-- The gesture-area spacer clones the active keyboard background drawable, preserving theme colors and alpha (including translucent themes) without double-compositing the keyboard itself.
+- The gesture-area spacer follows the active keyboard theme, including translucent ARGB themes, without double-compositing the keyboard itself.
 - IME safe-inset application now caches the last non-zero bottom inset and re-applies root insets after view attachment, preventing transient zero-inset layouts when switching IMEs or recreating a theme; the system navigation divider/contrast layer is disabled so the themed gesture area remains seamless.
+- The gesture-safe area and long-press mini-keyboard use a borderless fill derived from the active keyboard background (exact ARGB for color themes, center-sampled color for 9-patches), avoiding both legacy black popup panels and visible 9-patch edge seams.
 - Routed KeyboardSwitcher input-view refreshes through the same inset-aware container to avoid re-parenting crashes when Android rebinds the IME.
 - On gesture-navigation devices, the IME safe bottom area now uses the maximum of navigation-bar, mandatory-system-gesture, and tappable-element insets; some Android 16 IME windows report navigationBars.bottom as zero even while reserving the system hide/switch strip.
 - Physical Android 16 verification on Xiaomi 21121210G measured navBottom=0, mandatoryBottom=119, tappableBottom=119, so the IME applies a 119 px bottom safe spacer.
 - Physical Android 16 regression test for `modern.8`: with the built-in Test editor focused, 12 Gboard ↔ Hacker's Keyboard switches produced 45 inset applications, all with `appliedBottom=119` and zero with `appliedBottom=0`; the IME remained shown and stable.
+- Physical Android 16 visual regression test for `modern.10`: the lower keyboard/safe-area boundary and all rows through y=2399 remained continuously Material Dark `#263238` with no bright seam; an `e` long-press popup used the same `#263238` theme fill (zero pure-black changed pixels) while the underlying keyboard dimmed normally.
 - Updated resource-ID handling for modern non-final `R` values.
 - Updated CMake project metadata for the current native toolchain.
 - Preserved the upstream legacy keyboard resource namespaces and incomplete translation set; the matching legacy-only lint checks are disabled rather than generating a very large no-behavior resource diff.

@@ -804,19 +804,15 @@ public class LatinIME extends InputMethodService implements
 
         final View navigationBarSpacer = new View(this);
 
-        // Continue the selected keyboard theme through the system gesture area.
-        // Clone only the keyboard background (not the whole container) so translucent
-        // themes keep their original alpha instead of becoming darker from double
-        // compositing underneath the keyboard itself.
-        final android.graphics.drawable.Drawable keyboardBackground = keyboardView.getBackground();
-        if (keyboardBackground != null && keyboardBackground.getConstantState() != null) {
-            final android.graphics.drawable.Drawable spacerBackground = keyboardBackground
-                    .getConstantState().newDrawable(getResources()).mutate();
-            spacerBackground.setState(keyboardBackground.getState());
-            spacerBackground.setLevel(keyboardBackground.getLevel());
-            navigationBarSpacer.setBackground(spacerBackground);
+        // Do not reuse the keyboard 9-patch itself for the gesture area: its edge
+        // pixels can create a visible seam. Instead use a flat theme fill sampled
+        // from the active background. ColorDrawable themes retain their exact ARGB.
+        final android.graphics.drawable.Drawable themeFill = keyboardView.createThemeFillDrawable();
+        if (themeFill != null) {
+            navigationBarSpacer.setBackground(themeFill);
             navigationBarSpacer.setAlpha(keyboardView.getAlpha());
         }
+        keyboardView.captureThemeForPopups();
 
         // Re-created InputViews start with the last known safe size instead of flashing
         // or remaining at zero while Android is still dispatching the new window insets.

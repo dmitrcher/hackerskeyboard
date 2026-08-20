@@ -11,8 +11,8 @@ android {
         applicationId = 'org.pocketworkstation.pckeyboard'
         minSdk = 21
         targetSdk = 36
-        versionCode = 1041009
-        versionName = 'v1.41.1-modern.8'
+        versionCode = 1041011
+        versionName = 'v1.41.1-modern.10'
 
     }
 
